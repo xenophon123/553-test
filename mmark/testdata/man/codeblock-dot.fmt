@@ -1,0 +1,12 @@
+.SH "H"
+.PP
+.RS
+
+.nf
+\&. {
+    forward
+}
+
+.fi
+.RE
+

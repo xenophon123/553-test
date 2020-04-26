@@ -1,0 +1,16 @@
+.RS
+.TS
+allbox;
+l l 
+l l .
+\fBName\fP\fB	Age\fP
+Bob	27
+Alice	23
+.TE
+.RE
+
+
+.RS
+Table: This is a proper table caption
+.RE
+
