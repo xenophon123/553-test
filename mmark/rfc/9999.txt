@@ -1,0 +1,139 @@
+
+
+
+
+Internet Engineering Task Force (IETF)                  ZX, HX. Xu, Xiao
+Request for Comments: 9999                                 27 April 2020
+Category: Informational                                                 
+ISSN: 2070-1721
+
+
+                        Streaming Music Service
+
+Abstract
+
+   This document specifies the design and general architect of the Music
+   Streaming Service Protocol (MSSP), including the implementation of
+   client and server.
+
+Status of This Memo
+
+   This document is not an Internet Standards Track specification; it is
+   published for informational purposes.
+
+   This document is a product of the Internet Engineering Task Force
+   (IETF).  It represents the consensus of the IETF community.  It has
+   received public review and has been approved for publication by the
+   Internet Engineering Steering Group (IESG).  Not all documents
+   approved by the IESG are candidates for any level of Internet
+   Standard; see Section 2 of RFC 7841.
+
+   Information about the current status of this document, any errata,
+   and how to provide feedback on it may be obtained at
+   https://www.rfc-editor.org/info/rfc9999.
+
+Copyright Notice
+
+   Copyright (c) 2020 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents
+   (https://trustee.ietf.org/license-info) in effect on the date of
+   publication of this document.  Please review these documents
+   carefully, as they describe your rights and restrictions with respect
+   to this document.  Code Components extracted from this document must
+   include Simplified BSD License text as described in Section 4.e of
+   the Trust Legal Provisions and are provided without warranty as
+   described in the Simplified BSD License.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Overview & Message Format
+   3.  Commands
+     3.1.  CONNEC
+     3.2.  LISTMU
+     3.3.  PLAYMU
+     3.4.  STOPMU
+     3.5.  EXITCN
+
+1.  Introduction
+
+   In general, the implementation consists of two major components, the
+   client and the server.  While the client is responsible for establish
+   the initial connection, the server host will start and keep listening
+   on TCP port (number specified by user) before any client calls.
+
+   In order to make MSSP to work, the client is expected to establish
+   connection with server and communicate based on rules specified
+   below.  All commands used by client and server are case-sensitive
+   ASCII characters.  Each command includes keyword and optional
+   parameters separated by a white space.  Parameters are allowed to
+   have flexible lengths but all keywords are strictly 6-ASCII character
+   long.
+
+   There are two major patterns of the client-server communication.
+   When client sends non-music-playing requests, it is expected to
+   receive a single response from server.  For music-playing related
+   request, the client is expected to receive a series of audio frames
+   sent by server.  Besides functional-based command, commands related
+   to connection establishment and exit are handled as well.  All
+   messages other than those specified in this document are considered
+   as invalid commands and are expected to get an "Invalid" response
+   from server.
+
+2.  Overview & Message Format
+
+   Messages from client to server follow the "KEYWRD PARAMETER" format
+   and are expected to end in CRLF.  Messages from server to client have
+   the following format: ~~~~~ [ContentLength] [ContentType] [Content]
+   ~~~~~ ContentLength and ContentType are served as the header of the
+   message.  These three components are separated by a white space.
+   ContentType indicates the type of this message and has two
+   categories: 1 means the current message is transporting binary audio
+   (MP3) frames. 0 means the current message is transporting normal
+   texts.
+
+3.  Commands
+
+3.1.  CONNEC
+
+   No parameter is included in this command.  Server is expected to
+   return a simple text message with two possible conditions.
+   (ContentType = 1) A message demonstrating that connection
+   successfully established A message demonstrating that connection was
+   not established due to unrecognized errors
+
+3.2.  LISTMU
+
+   No parameter is included in this command.  Server is expected to
+   return a simple text message with two possible conditions.
+   (ContentType = 1) A list of music available in JSON format showing
+   the name of the music A message demonstrating that the specific
+   command failed due to unrecognized errors
+
+3.3.  PLAYMU
+
+   A mandatory parameter is included in this command.  Server is
+   expected to return either a series of audio frames or a simple text
+   message with two possible conditions.  A binary format audio data
+   with ContentType = 1.  A message demonstrating that the specific
+   command failed due to unrecognized errors or invalid syntax with
+   ContentType = 0.
+
+3.4.  STOPMU
+
+   No parameter is included in this command.  Server is expected to
+   return a simple text message with two possible conditions.
+   (ContentType = 1) A message demonstrating that the operation is
+   successful A message demonstrating that the specific command failed
+   due to unrecognized errors
+
+3.5.  EXITCN
+
+   No parameter is included in this command.  Server is expected to
+   return a simple text message with two possible conditions.
+   (ContentType = 1) A message demonstrating that the operation is
+   successful A message demonstrating that the specific command failed
+   due to unrecognized errors
