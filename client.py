@@ -30,55 +30,96 @@ class mywrapper(object):
         return result
 
 
+def handle_single_data(wrap, cond_filled, data):
+    ind = data.find("\n\n")
+    if ind == -1:
+        print "Invalid Framing"
+        return
+    try:
+        header_lst = data[:ind].split("\n")
+        _, status = header_lst[0].split(":")
+        _, command = header_lst[1].split(":")
+    except:
+        print "Invalid Framing for TYPE/COMMAND"
+        return
+    if status == "RES/INVALID":
+        print "Invalid ", command
+        return
+    ind += 2
+    body = data[ind:]
+    if command == "LIST":
+        print "Song List:"
+        print body
+    elif command == "STOP":
+        print "Stop playing the song"
+        cond_filled.acquire()
+        wrap.data = ""
+        wrap.mf = None
+        cond_filled.release()
+    elif command == "PLAY":
+        print "Begin playing the song"
+        cond_filled.acquire()
+        wrap.data = ""
+        wrap.mf = mad.MadFile(wrap)
+        cond_filled.notify()
+        cond_filled.release()
+    elif command == "PLAYING":
+        # print "Receiving music data"
+        cond_filled.acquire()
+        wrap.data += body
+        cond_filled.release()
+  
+
 # Receive messages.  If they're responses to info/list, print
 # the results for the user to see.  If they contain song data, the
 # data needs to be added to the wrapper object.  Be sure to protect
 # the wrapper with synchronization, since the other thread is using
 # it too!
 def recv_thread_func(wrap, cond_filled, sock):
+    buf = ""
+    remaining_size = 0
     while True:
         data = sock.recv(SEND_BUFFER)
         if data is None or len(data) == 0:
             print "Client Error in Receiving Data from Server"
             print "Close the recv thread"
-            break
-        data_lst = data.split("\n")
-        if len(data_lst) < 4:
-            print "Invalid Framing"
-            continue
-        try:
-            _, status = data_lst[0].split(":")
-            _, command = data_lst[1].split(":")
-        except ValueError:
-            print "Invalid Framing for TYPE/COMMAND"
-            continue
-        if status == "RES/INVALID":
-            print "Invalid ", command
-            continue
-        if command == "LIST":
-            if data_lst[3] == "":
-                print "Empty Song List"
+            return
+
+        # Handle the data belonging to the last command
+        if remaining_size != 0:
+            if len(data) <= remaining_size:
+                buf += data
+                remaining_size -= len(data)
+                if remaining_size == 0:
+                    handle_single_data(wrap, cond_filled, buf)
+                    buf = ""
                 continue
-            print "Song List:"
-            for i in range(3, len(data_lst)):
-                print data_lst[i]
-        elif command == "STOP":
-            print "Stop playing the song"
-            cond_filled.acquire()
-            wrap.data = ""
-            wrap.mf = None
-            cond_filled.release()
-        elif command == "PLAY":
-            print "Begin playing the song"
-            cond_filled.acquire()
-            wrap.data = ""
-            wrap.mf = mad.MadFile(wrap)
-            cond_filled.notify()
-            cond_filled.release()
-        elif command == "PLAYING":
-            cond_filled.acquire()
-            wrap.data += "\n".join(data_lst[3:])
-            cond_filled.release()
+            buf += data[:remaining_size]
+            data = data[remaining_size:]
+            handle_single_data(wrap, cond_filled, buf)
+            buf = ""
+            remaining_size = 0
+        
+        buf += data
+        while True:
+            ind = buf.find("\n\n")
+            if ind == -1:
+                break
+            header = buf[:ind]
+            try:
+                header_lst = header.split("\n")
+                body_len = int(header_lst[2].split(":")[1])
+            except:
+                print "Invalid Framing for BODY_LEN (Cause following commands corrupted!)"
+                print "Close the recv thread"
+                return
+            ind += 2
+            total_len = ind + body_len
+            if total_len > len(buf):
+                remaining_size = total_len - len(buf)
+                break
+            handle_single_data(wrap, cond_filled, buf[:total_len])
+            buf = buf[total_len:]
 
 
 # If there is song data stored in the wrapper object, play it!

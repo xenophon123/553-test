@@ -34,7 +34,11 @@ def client_write(client):
         client.lock.acquire()
         while len(client.data_queue) != 0:
             try:
-                client.conn.sendall(client.data_queue.popleft())
+                to_send = client.data_queue.popleft()
+                ind = to_send.find("\n\n")
+                if to_send[:ind].split("\n")[1].split(":")[1] == "LIST":
+                    print "tosend:", to_send[:ind]
+                client.conn.sendall(to_send)
             except:
                 print "Server Error in Sending Data to Client"
                 print "Close the write thread"
@@ -52,11 +56,13 @@ def client_write(client):
             if client.already_sent >= len(client.music_file):
                 client.music_file = None
             else:
-                header = "TYPE:RES/OK\nCOMMAND:PLAYING\n\n"
-                body_len = SEND_BUFFER - len(header)
-                data = client.music_file[client.already_sent:client.already_sent+body_len]
-                client.already_sent += body_len
-                client.data_queue.append(header + data)
+                header = "TYPE:RES/OK\nCOMMAND:PLAYING\nBODY_LEN:0000\n\n"
+                max_body_len = SEND_BUFFER - len(header)
+                body = client.music_file[client.already_sent:\
+                                            min(client.already_sent+max_body_len,len(client.music_file))]
+                header = header.replace("0000", str(len(body)))      
+                client.already_sent += len(body)
+                client.data_queue.append(header + body)
         client.lock.release()
         
 # Thread that receives commands from the client.  All recv() calls should
@@ -64,41 +70,39 @@ def client_write(client):
 def client_read(client):
     while True:
         data = client.conn.recv(SEND_BUFFER)
-        if data == "":
+        if data is None or len(data) == 0:
             print "Server Error in Receiving Data from Client"
             print "Close the read thread"
-            break
-        print "\nserver receives: \n", data
-        data_lst = data.split("\n")
-        if len(data_lst) < 4:
-            print "Invalid Framing"
-            continue
+            return
         try:
+            data_lst = data.split("\n")
             _, command = data_lst[1].split(":")
-        except ValueError:
+        except:
             print "Invalid Framing for COMMAND"
             continue
+        print "server receives: ", command
         if command == "LIST":
             client.lock.acquire()
-            client.data_queue.appendleft("TYPE:RES/OK\nCOMMAND:LIST\n\n" + SONG_INFO[1])
+            data = "TYPE:RES/OK\nCOMMAND:LIST\nBODY_LEN:{0}\n\n".format(len(SONG_INFO[1])) + SONG_INFO[1]
+            client.data_queue.appendleft(data)
             client.lock.release()
         elif command == "STOP":
             client.lock.acquire()
             client.music_file = None 
-            client.data_queue.append("TYPE:RES/OK\nCOMMAND:STOP\n\n")
+            client.data_queue.append("TYPE:RES/OK\nCOMMAND:STOP\nBODY_LEN:0\n\n")
             client.lock.release()
         elif command == "PLAY":
             song_id = -1
             try:
                 song_id = int(data_lst[2].split(":")[1])
-            except ValueError:
+            except:
                 print "Invalid Framing for PARAMETER"
                 continue
             if song_id >= len(SONG_INFO[0]) or song_id < 0:
                 print "Invalid Song ID"
                 continue
             client.lock.acquire()
-            client.data_queue.append("TYPE:RES/OK\nCOMMAND:PLAY\n\n")
+            client.data_queue.append("TYPE:RES/OK\nCOMMAND:PLAY\nBODY_LEN:0\n\n")
             client.song_id = song_id
             client.is_updated = True
             client.lock.release()
@@ -139,9 +143,11 @@ def main():
         conn, _ = s.accept()
         client = Client(conn)
         t = Thread(target=client_read, args=(client,))
+        t.daemon = True
         threads.append(t)
         t.start()
         t = Thread(target=client_write, args=(client,))
+        t.daemon = True
         threads.append(t)
         t.start()
     s.close()
